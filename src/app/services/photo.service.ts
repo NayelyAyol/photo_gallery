@@ -35,62 +35,59 @@ export class PhotoService {
       resultType: CameraResultType.Uri,
       source: CameraSource.Camera,
       quality: 100,
+      saveToGallery: true, 
     });
 
-    // CHANGE: Add `savedImageFile`
-    // Save the picture and add it to photo collection
     const savedImageFile = await this.savePicture(capturedPhoto);
-
-    // CHANGE: Update argument to unshift array method
     this.photos.unshift(savedImageFile);
 
-      Preferences.set({
+    Preferences.set({
       key: this.PHOTO_STORAGE,
       value: JSON.stringify(this.photos),
     });
   }
 
 
-// CHANGE: Update `savePicture()` method
-private async savePicture(photo: Photo) {
-  let base64Data: string | Blob;
-  // "hybrid" will detect mobile - iOS or Android
-  if (this.platform.is('hybrid')) {
-    const file = await Filesystem.readFile({
-      path: photo.path!,
+  // CHANGE: Update `savePicture()` method
+  private async savePicture(photo: Photo) {
+    let base64Data: string | Blob;
+    // "hybrid" will detect mobile - iOS or Android
+    if (this.platform.is('hybrid')) {
+      const file = await Filesystem.readFile({
+        path: photo.path!,
+      });
+      base64Data = file.data;
+    } else {
+      // Fetch the photo, read as a blob, then convert to base64 format
+      const response = await fetch(photo.webPath!);
+      const blob = await response.blob();
+      base64Data = await this.convertBlobToBase64(blob) as string;
+    }
+
+    // Write the file to the data directory
+    const fileName = `${Date.now()}-Ayol.${photo.format}`;
+    const savedFile = await Filesystem.writeFile({
+      path: fileName,
+      data: base64Data,
+      directory: Directory.Data,
     });
-    base64Data = file.data;
-  } else {
-    // Fetch the photo, read as a blob, then convert to base64 format
-    const response = await fetch(photo.webPath!);
-    const blob = await response.blob();
-    base64Data = await this.convertBlobToBase64(blob) as string;
-  }
 
-  // Write the file to the data directory
-  const fileName = `${Date.now()}Ayol.${photo.format}`;
-  const savedFile = await Filesystem.writeFile({
-    path: fileName,
-    data: base64Data,
-    directory: Directory.Data,
-  });
-
-  // CHANGE: Add platform check
-  if (this.platform.is('hybrid')) {
-    // Display the new image by rewriting the 'file://' path to HTTP
-    return {
-      filepath: savedFile.uri,
-      webviewPath: Capacitor.convertFileSrc(savedFile.uri),
-    };
-  } else {
-    // Use webPath to display the new image instead of base64 since it's
-    // already loaded into memory
-    return {
-      filepath: fileName,
-      webviewPath: photo.webPath,
-    };
+    // CHANGE: Add platform check
+    if (this.platform.is('hybrid')) {
+      // Display the new image by rewriting the 'file://' path to HTTP
+      return {
+        filepath: savedFile.uri,
+        webviewPath: Capacitor.convertFileSrc(savedFile.uri),
+      };
+    } else {
+      // Use webPath to display the new image instead of base64 since it's
+      // already loaded into memory
+      return {
+        filepath: fileName,
+        webviewPath: photo.webPath,
+      };
+    }
   }
-}
 
   // CHANGE: Add the `convertBlobToBase64` method
   private convertBlobToBase64(blob: Blob) {
